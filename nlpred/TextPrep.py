@@ -5,6 +5,50 @@ warnings.simplefilter("ignore", DeprecationWarning)
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.decomposition import LatentDirichletAllocation as LDA
 
+# Prepares textual input for model creation.  Supports both reddit JSON input and vectors of Strings.
+#
+# @arg trueSource Either:
+#                   1) if redditData = true, the filename of the JSON file containing "true" Strings, including the .json extension
+#                   2) if redditData = false, an array of Strings which are known to be associated with a "true"/"1" prediction
+# @arg falseSource Either:
+#                   1) if redditData = true, the filename of the JSON file containing "false" Strings, including the .json extension
+#                   2) if redditData = false, an array of Strings which are known to be associated with a "false"/"0" prediction
+# @arg redditData Boolean:  
+#                   1) True indicates the data is given as JSON objects, and _getCorpusFromReddit will be called.
+#                   2) False indicates the data is given as vectors of Strings, and _getCorpusFromVectors will be called.
+#                 Note that redditData is TRUE by default.
+# @return A Dictionary with two elements: 
+#         1)  "processedCorpusDataFrame", a data frame containing three columns:
+#               I)   'paper_text', the original input textual data
+#               II)  'value', the corresponding 1/0 (i.e., true/false) value associated with the 'paper_text' entry in the same row
+#               III) 'paper_text_processed', the processed (tokenized with punctuation and capitalization removed) textual data
+#         2)  "count_data", the token counts from the processed textual data to be used in model creation
+def prepareTestTrainData(trueSource, falseSource, isRedditData = True):
+    processedCorpusDataFrame = _getCorpusDataFrame(trueSource, falseSource, redditData=isRedditData)
+    count_data = _processDataFrame(processedCorpusDataFrame)
+    tempDict = {
+        "processedCorpusDataFrame" : processedCorpusDataFrame,
+        "count_data" : count_data
+    }
+    return tempDict
+
+# Prepares a list of Strings for prediction using a previously created model.
+#
+# @arg docsToPredict a list of Strings containing the documents to have predictions made from
+# @return A Dictionary with two elements: 
+#         1)  "processedCorpusDataFrame", a data frame containing two columns:
+#               I)   'paper_text', the original input textual data
+#               II)  'paper_text_processed', the processed (tokenized with punctuation and capitalization removed) textual data
+#         2)  "count_data", the token counts from the processed textual data to be used for prediction
+def preparePredData(docsToPredict):
+    processedCorpusDataFrame = _getPredDataFrame(stringList=docsToPredict)
+    count_data = _processDataFrame(processedCorpusDataFrame)
+    tempDict = {
+        "processedCorpusDataFrame" : processedCorpusDataFrame,
+        "count_data" : count_data
+    }
+    return tempDict
+
 # Helper method for Reddit data.
 # Extracts the 'selftext' corpus from a reddit JSON and deletes empty/removed submissions.
 # @arg jsonFileString The filename of the JSON file, including the .json extension
@@ -112,4 +156,9 @@ def _processDataFrame(papers):
     count_data = count_vectorizer.fit_transform(papers['paper_text_processed'])
 
     return count_data
-  
+
+
+############# Test stuff
+#testData = _getCorpusDataFrame('SuicideWatchRedditJSON.json', 'AllRedditJSON.json', redditData=True)
+
+#count_data = _processDataFrame(testData)
