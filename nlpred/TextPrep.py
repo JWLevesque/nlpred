@@ -3,7 +3,7 @@ import pandas as pd
 import warnings
 warnings.simplefilter("ignore", DeprecationWarning)
 from sklearn.feature_extraction.text import CountVectorizer
-from sklearn.decomposition import LatentDirichletAllocation as LDA
+#from sklearn.decomposition import LatentDirichletAllocation as LDA
 
 # Prepares textual input for model creation.  Supports both reddit JSON input and vectors of Strings.
 #
