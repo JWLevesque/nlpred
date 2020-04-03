@@ -46,12 +46,19 @@ class Model:
     # Predicts True/False (1/0) for each document (String) in the List listOfDocStrings argument using the model stored in 
     #   this Model object.
     # @arg listOfDocStrings a List of Strings wherein each String contains the text of a document to predict True/False from
-    # @return a DataFrame containing two columns:
+    # @return a DataFrame containing three columns:
     #           1)  'paper_text', the original input textual data
     #           2)  'paper_text_processed', the processed (tokenized with punctuation and capitalization removed) textual data
     #           3)  'value', the 1/0 (True/False) prediction for the 'paper_text' entry in the same row
     def predict(self, listOfDocStrings):
-        pass
+        predDict = preparePredData(listOfDocStrings)
+        # Create the Document Topic Matrix
+        docTopics = self.topicLDAModel.transform(predDict['count_data'])
+        # Predict for each provided document
+        y_pred = self.fit.predict(docTopics)
+        # Add the predictions to predDict
+        predDict['processedCorpusDataFrame']['value'] = y_pred
+        return predDict['processedCorpusDataFrame']
     
     # Prints to stdout a summary of the model.
     def print(self):
@@ -86,6 +93,19 @@ def loadModel(fileName):
     with open(fileName, 'rb') as file:
         tempModel = pickle.load(file)
     return tempModel
+
+# Predicts True/False (1/0) for each document (String) in the List listOfDocStrings argument using the model stored in 
+#   the indicated file location.
+# @arg fileName the file name of the saved model, including the .pkl extension.  e.g., "my_model.pkl"
+# @arg listOfDocStrings a List of Strings wherein each String contains the text of a document to predict True/False from
+# @return a DataFrame containing three columns:
+#           1)  'paper_text', the original input textual data
+#           2)  'paper_text_processed', the processed (tokenized with punctuation and capitalization removed) textual data
+#           3)  'value', the 1/0 (True/False) prediction for the 'paper_text' entry in the same row
+def predictFromFile(fileName, listOfDocStrings):
+    tempModel = loadModel(fileName)
+    tbr = tempModel.predict(listOfDocStrings)
+    return tbr
 
 # Creates a Model object for each topic quantity specified in the argument topicQuantityVector.
 # @arg topicQuantityVector a vector of the topic quantities to test, e.g. [30,40,50,60,70,80].
@@ -166,15 +186,26 @@ def modelWithNTopics(topicQuantityVector, count_data, count_vectorizer, response
     return fitList
 
 # Test Code
-preppedData = prepareTestTrainData('SuicideWatchRedditJSON.json', 'AllRedditJSON.json', isRedditData=True)
-count_d = preppedData['count_data']
-count_v = preppedData['count_vectorizer']
-yVals = preppedData['processedCorpusDataFrame']["value"].tolist()
-modelList = modelWithNTopics([10], count_d, count_v, yVals)
 
-pkl_filename = "optimal_reddit_suicide_model.pkl"
-with open(pkl_filename, 'wb') as file:
-    pickle.dump(modelList[0], file)
+##### modelWithNTopics() method #####
+# preppedData = prepareTestTrainData('SuicideWatchRedditJSON.json', 'AllRedditJSON.json', isRedditData=True)
+# count_d = preppedData['count_data']
+# count_v = preppedData['count_vectorizer']
+# yVals = preppedData['processedCorpusDataFrame']["value"].tolist()
+# modelList = modelWithNTopics([10], count_d, count_v, yVals)
+
+##### File I/O #####
+# pkl_filename = "optimal_reddit_suicide_model.pkl"
+# with open(pkl_filename, 'wb') as file:
+#     pickle.dump(modelList[0], file)
     
-with open("optimal_reddit_suicide_model.pkl", 'rb') as file:
-    test_model = pickle.load(file)
+# with open("optimal_reddit_suicide_model.pkl", 'rb') as file:
+#     test_model = pickle.load(file)
+
+##### Model.predict() #####
+# from TextPrep import _getSubmissionStringArray
+# testDocsToTest1 = _getSubmissionStringArray('SuicideWatchRedditJSON.json')
+# testDocsToTest2 = _getSubmissionStringArray('AllRedditJSON.json')
+# testDocStringList = testDocsToTest1 + testDocsToTest2
+# testModel = loadModel("optimal_reddit_suicide_model.pkl")
+# predDict = testModel.predict(testDocStringList)
