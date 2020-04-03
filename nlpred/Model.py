@@ -52,10 +52,46 @@ class Model:
     #           3)  'value', the 1/0 (True/False) prediction for the 'paper_text' entry in the same row
     def predict(self, listOfDocStrings):
         pass
+    
+    # Prints to stdout a summary of the model.
+    def print(self):
+        print("Topic Quantity : ", self.topicQuantity)
+        print("Confusion Matrix : \n", self.confusion_matrix)
+        print("Accuracy : ", self.accuracy)
+        print("Recall : ", self.recall)
+        print("AUC : ", self.AUC)
+
+    # Permits the standard print() function to print a summary of the model when called with a Model object as an argument.
+    def __str__(self):
+        tbr = (
+            f"Topic Quantity : {self.topicQuantity}\n"
+            f"Confusion Matrix : \n{self.confusion_matrix}\n"
+            f"Accuracy : {self.accuracy}\n"
+            f"Recall : {self.recall}\n"
+            f"AUC : {self.AUC}"
+        )
+        return tbr
+    
+    # Saves the model as a .pkl file
+    # @arg fileName the desired filename, including the .pkl extension.  e.g., "my_model.pkl"
+    # @postState the model object will be saved as fileName in the current working directory.
+    def save(self, fileName = "my_model.pkl"):
+        with open(fileName, 'wb') as file:
+            pickle.dump(self, file)
+
+# Loads a model saved as a .pkl file
+# @arg fileName the file name of the saved model, including the .pkl extension.  e.g., "my_model.pkl"
+# @return a Model object of the model saved in the specified .pkl file.
+def loadModel(fileName):
+    with open(fileName, 'rb') as file:
+        tempModel = pickle.load(file)
+    return tempModel
 
 # Creates a Model object for each topic quantity specified in the argument topicQuantityVector.
 # @arg topicQuantityVector a vector of the topic quantities to test, e.g. [30,40,50,60,70,80].
 #                           Note that the values in this vector must be integers.
+#                           Note that if only a single quantity is desired, it must be passed as
+#                               a list with one element, e.g. topicQuantityVector = [10].
 # @arg count_data the input to LDA.fit(...)
 # @arg count_vectorizer the CoutVectorizer object used int he creation of the Term-Document Matrix
 # @arg responseValues the response, Y, for the input data; a vector;
@@ -130,8 +166,15 @@ def modelWithNTopics(topicQuantityVector, count_data, count_vectorizer, response
     return fitList
 
 # Test Code
-# preppedData = prepareTestTrainData('SuicideWatchRedditJSON.json', 'AllRedditJSON.json', isRedditData=True)
-# count_d = preppedData['count_data']
-# count_v = preppedData['count_vectorizer']
-# yVals = preppedData['processedCorpusDataFrame']["value"].tolist()
-# modelList = modelWithNTopics([10,20], count_d, count_v, yVals)
+preppedData = prepareTestTrainData('SuicideWatchRedditJSON.json', 'AllRedditJSON.json', isRedditData=True)
+count_d = preppedData['count_data']
+count_v = preppedData['count_vectorizer']
+yVals = preppedData['processedCorpusDataFrame']["value"].tolist()
+modelList = modelWithNTopics([10], count_d, count_v, yVals)
+
+pkl_filename = "optimal_reddit_suicide_model.pkl"
+with open(pkl_filename, 'wb') as file:
+    pickle.dump(modelList[0], file)
+    
+with open("optimal_reddit_suicide_model.pkl", 'rb') as file:
+    test_model = pickle.load(file)
