@@ -7,7 +7,7 @@ setup(
     author_email='JWLevesque@gmail.com',
     packages=['nlpred'],
     # Dependencies
-    install_requires=['numpy', 'pandas', 'json', 're', 'sklearn', 'warnings', 'pickle'],
+    install_requires=['numpy', 'pandas', 'json', 're', 'sklearn', 'warnings', 'pickle', 'typing'],
     version='0.1',
     license='GNU GPLv3',
     description='This package provides support for making predictions of binary outcomes based on natural language corpora.',

@@ -1,11 +1,11 @@
 import json
 import pandas as pd
 import warnings
+from typing import List
 warnings.simplefilter("ignore", DeprecationWarning)
 from sklearn.feature_extraction.text import CountVectorizer
-#from sklearn.decomposition import LatentDirichletAllocation as LDA
 
-# Prepares textual input for model creation.  Supports both reddit JSON input and vectors of Strings.
+## Prepares textual input for model creation.  Supports both reddit JSON input and vectors of Strings.
 #
 # @arg trueSource Either:
 #                   1) if redditData = true, the filename of the JSON file containing "true" Strings, including the .json extension
@@ -24,7 +24,7 @@ from sklearn.feature_extraction.text import CountVectorizer
 #               III) 'paper_text_processed', the processed (tokenized with punctuation and capitalization removed) textual data
 #         2)  "count_data", the token counts from the processed textual data to be used in model creation
 #         3)  "count_vectorizer", the CountVectorizer object used in the creation of the Term-Document Matrix
-def prepareTestTrainData(trueSource, falseSource, isRedditData = True):
+def prepareTestTrainData(trueSource, falseSource, isRedditData: bool = True):
     processedCorpusDataFrame = _getCorpusDataFrame(trueSource, falseSource, redditData=isRedditData)
     count_data, count_vectorizer = _processDataFrame(processedCorpusDataFrame)
     tempDict = {
@@ -34,7 +34,7 @@ def prepareTestTrainData(trueSource, falseSource, isRedditData = True):
     }
     return tempDict
 
-# Prepares a list of Strings for prediction using a previously created model.
+## Prepares a list of Strings for prediction using a previously created model.
 #
 # @arg docsToPredict a list of Strings containing the documents to have predictions made from
 # @return A Dictionary with two elements: 
@@ -42,7 +42,7 @@ def prepareTestTrainData(trueSource, falseSource, isRedditData = True):
 #               I)   'paper_text', the original input textual data
 #               II)  'paper_text_processed', the processed (tokenized with punctuation and capitalization removed) textual data
 #         2)  "count_data", the token counts from the processed textual data to be used for prediction
-def preparePredData(docsToPredict):
+def preparePredData(docsToPredict: List[str]):
     processedCorpusDataFrame = _getPredDataFrame(stringList=docsToPredict)
     count_data, _ = _processDataFrame(processedCorpusDataFrame)
     tempDict = {
@@ -51,11 +51,11 @@ def preparePredData(docsToPredict):
     }
     return tempDict
 
-# Helper method for Reddit data.
+## Helper method for Reddit data.
 # Extracts the 'selftext' corpus from a reddit JSON and deletes empty/removed submissions.
-# @arg jsonFileString The filename of the JSON file, including the .json extension
+# @arg jsonFileString The filename of the JSON file, including the .json extension.
 # @return a list containing raw Strings of the textual reddit submissions.
-def _getSubmissionStringArray(jsonFileString):
+def _getSubmissionStringArray(jsonFileString: str):
     
     # open the SuicideWatch JSON
     with open(jsonFileString, 'r') as myFile:
@@ -72,13 +72,13 @@ def _getSubmissionStringArray(jsonFileString):
                 tbr.append(sList['data'][i]['selftext'])
     return tbr
 
-# Helper method which creates a DataFrame from two vectors of Strings--one for entries designated 'true', and one for 'false'.
+## Helper method which creates a DataFrame from two vectors of Strings--one for entries designated 'true', and one for 'false'.
 # @arg trueList An array of Strings which are known to be associated with a "true"/"1" prediction
 # @arg falseList An array of Strings which are known to be associated with a "false"/"0" prediction
 # @return A DataFrame with two columns: 
 #         1)  'paper_text', the textual data
 #         2)  'value', the corresponding 1/0 (i.e., true/false) value associated with the 'paper_text' entry in the same row
-def _getCorpusFromVectors(trueList, falseList):
+def _getCorpusFromVectors(trueList: List[str], falseList: List[str]):
     # Generate vectors of 0s and 1s of appropriate size for labeling the input vectors
     trueLabels = [1]*len(trueList)
     falseLabels = [0]*len(falseList)
@@ -92,18 +92,18 @@ def _getCorpusFromVectors(trueList, falseList):
 
     return papers
 
-# Helper method for Reddit data.
+## Helper method for Reddit data.
 # Creates a DataFrame from two reddit JSON objects, with empty/removed selftext entries deleted.
 # @arg trueJsonFileString The filename of the JSON file containing "true" Strings, including the .json extension
 # @arg falseJsonFileString The filename of the JSON file containing "false" Strings, including the .json extension
 # @return A DataFrame with two columns: 
 #         1)  'paper_text', the textual data
 #         2)  'value', the corresponding 1/0 (i.e., true/false) value associated with the 'paper_text' entry in the same row
-def _getCorpusFromReddit(trueJsonFileString, falseJsonFileString):
+def _getCorpusFromReddit(trueJsonFileString: str, falseJsonFileString: str):
     tbr = _getCorpusFromVectors(_getSubmissionStringArray(trueJsonFileString), _getSubmissionStringArray(falseJsonFileString))
     return tbr
 
-# Creates a Data Frame object to be processed.  Calls either _getCorpusFromReddit or _getCorpusFromVectors.
+## Creates a Data Frame object to be processed.  Calls either _getCorpusFromReddit or _getCorpusFromVectors.
 # @arg trueSource Either:
 #                   1) if redditData = true, the filename of the JSON file containing "true" Strings, including the .json extension
 #                   2) if redditData = false, an array of Strings which are known to be associated with a "true"/"1" prediction
@@ -117,20 +117,20 @@ def _getCorpusFromReddit(trueJsonFileString, falseJsonFileString):
 # @return A DataFrame with two columns: 
 #         1)  'paper_text', the textual data
 #         2)  'value', the corresponding 1/0 (i.e., true/false) value associated with the 'paper_text' entry in the same row
-def _getCorpusDataFrame(trueSource, falseSource, redditData = True):
+def _getCorpusDataFrame(trueSource, falseSource, redditData: bool = True):
     if(redditData):
         return _getCorpusFromReddit(trueSource, falseSource)
     else:
         return _getCorpusFromVectors(trueSource, falseSource)
 
-# Helper method for prediction.
+## Helper method for prediction.
 # Creates a DataFrame containing a single column named 'paper_text' with the documents to be used in prediction.
 # @arg stringList a List of documents in String form to be used in prediction
-def _getPredDataFrame(stringList):
+def _getPredDataFrame(stringList: List[str]):
     return pd.DataFrame(data = stringList, columns=['paper_text'])
 
 
-# Tokenizes the data for LDA by removing punctuation and capitalization, and then provides token counts.
+## Tokenizes the data for LDA by removing punctuation and capitalization, and then provides token counts.
 # @arg papers a DataFrame containing two columns:
 #      1) 'paper_text', the textual data
 #      2) 'value', OPTIONAL, the corresponding 1/0 (i.e., true/false) value associated with the 'paper_text' entry in the same row

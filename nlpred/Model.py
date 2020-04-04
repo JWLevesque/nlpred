@@ -1,6 +1,6 @@
 import warnings
 warnings.simplefilter("ignore", DeprecationWarning)
-from sklearn.decomposition import LatentDirichletAllocation as LDA
+from sklearn.decomposition import LatentDirichletAllocation
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegressionCV
@@ -10,16 +10,19 @@ from sklearn.metrics import recall_score
 from sklearn.metrics import roc_auc_score
 import numpy as np
 import pickle
+from typing import List
 from TextPrep import prepareTestTrainData
 from TextPrep import preparePredData
 
 class Model:
 
-    def __init__(self, topicQuantity, fit, topicLDAModel, count_vectorizer, confusion_matrix, accuracy, recall, AUC):
+    def __init__(
+        self, topicQuantity: int, fit: LogisticRegressionCV, topicLDAModel: LatentDirichletAllocation, 
+        count_vectorizer: CountVectorizer, confusion_matrix, accuracy: float, recall: float, AUC: float):
 
         ############# INSTANCE VARIABLES #############
 
-        # 1) "topicQuantity", the number of topics used in that model
+        # 1) "topicQuantity", the number of topics used in .this model
         self.topicQuantity = topicQuantity
         # 2) "fit", the fitted model itself
         self.fit = fit
@@ -43,24 +46,24 @@ class Model:
         #       "false" from logreg predictive output
         self.AUC = AUC
     
-    # Predicts True/False (1/0) for each document (String) in the List listOfDocStrings argument using the model stored in 
+    ## Predicts True/False (1/0) for each document (String) in the List listOfDocStrings argument using the model stored in 
     #   this Model object.
     # @arg listOfDocStrings a List of Strings wherein each String contains the text of a document to predict True/False from
     # @return a DataFrame containing three columns:
     #           1)  'paper_text', the original input textual data
     #           2)  'paper_text_processed', the processed (tokenized with punctuation and capitalization removed) textual data
     #           3)  'value', the 1/0 (True/False) prediction for the 'paper_text' entry in the same row
-    def predict(self, listOfDocStrings):
+    def predict(self, listOfDocStrings: List[str]):
         predDict = preparePredData(listOfDocStrings)
         # Create the Document Topic Matrix
-        docTopics = self.topicLDAModel.transform(predDict['count_data'])
+        docTopMat = self.topicLDAModel.transform(predDict['count_data'])
         # Predict for each provided document
-        y_pred = self.fit.predict(docTopics)
+        y_pred = self.fit.predict(docTopMat)
         # Add the predictions to predDict
         predDict['processedCorpusDataFrame']['value'] = y_pred
         return predDict['processedCorpusDataFrame']
     
-    # Prints to stdout a summary of the model.
+    ## Prints to stdout a summary of the model.
     def print(self):
         print("Topic Quantity : ", self.topicQuantity)
         print("Confusion Matrix : \n", self.confusion_matrix)
@@ -68,7 +71,7 @@ class Model:
         print("Recall : ", self.recall)
         print("AUC : ", self.AUC)
 
-    # Permits the standard print() function to print a summary of the model when called with a Model object as an argument.
+    ## Permits the standard print() function to print a summary of the model when called with a Model object as an argument.
     def __str__(self):
         tbr = (
             f"Topic Quantity : {self.topicQuantity}\n"
@@ -79,22 +82,22 @@ class Model:
         )
         return tbr
     
-    # Saves the model as a .pkl file
+    ## Saves the model as a .pkl file
     # @arg fileName the desired filename, including the .pkl extension.  e.g., "my_model.pkl"
     # @postState the model object will be saved as fileName in the current working directory.
-    def save(self, fileName = "my_model.pkl"):
+    def save(self, fileName: str = "my_model.pkl"):
         with open(fileName, 'wb') as file:
             pickle.dump(self, file)
 
-# Loads a model saved as a .pkl file
+## Loads a model saved as a .pkl file
 # @arg fileName the file name of the saved model, including the .pkl extension.  e.g., "my_model.pkl"
 # @return a Model object of the model saved in the specified .pkl file.
-def loadModel(fileName):
+def loadModel(fileName: str) -> Model:
     with open(fileName, 'rb') as file:
         tempModel = pickle.load(file)
     return tempModel
 
-# Predicts True/False (1/0) for each document (String) in the List listOfDocStrings argument using the model stored in 
+## Predicts True/False (1/0) for each document (String) in the List listOfDocStrings argument using the model stored in 
 #   the indicated file location.
 # @arg fileName the file name of the saved model, including the .pkl extension.  e.g., "my_model.pkl"
 # @arg listOfDocStrings a List of Strings wherein each String contains the text of a document to predict True/False from
@@ -102,12 +105,12 @@ def loadModel(fileName):
 #           1)  'paper_text', the original input textual data
 #           2)  'paper_text_processed', the processed (tokenized with punctuation and capitalization removed) textual data
 #           3)  'value', the 1/0 (True/False) prediction for the 'paper_text' entry in the same row
-def predictFromFile(fileName, listOfDocStrings):
+def predictFromFile(fileName: str, listOfDocStrings: List[str]):
     tempModel = loadModel(fileName)
     tbr = tempModel.predict(listOfDocStrings)
     return tbr
 
-# Creates a Model object for each topic quantity specified in the argument topicQuantityVector.
+## Creates a Model object for each topic quantity specified in the argument topicQuantityVector.
 # @arg topicQuantityVector a vector of the topic quantities to test, e.g. [30,40,50,60,70,80].
 #                           Note that the values in this vector must be integers.
 #                           Note that if only a single quantity is desired, it must be passed as
@@ -121,14 +124,14 @@ def predictFromFile(fileName, listOfDocStrings):
 #                       to go through for the elastic net CV.  Default is 4900.  Lower numbers drastically decrease 
 #                       runtime for large datasets, but may create inferior models.
 # @return a list of Model objects, one for each fitted model based on the topic quantities provided in the argument topicQuantityVector.
-def modelWithNTopics(topicQuantityVector, count_data, count_vectorizer, responseValues, max_iterations = 4900):
+def modelWithNTopics(topicQuantityVector: List[int], count_data, count_vectorizer: CountVectorizer, responseValues: List[bool], max_iterations: int = 4900):
     
     fitList = []
     for topicQuantity in topicQuantityVector:
         number_topics = topicQuantity
         
         # Create and fit the LDA model
-        lda = LDA(n_components=number_topics)
+        lda = LatentDirichletAllocation(n_components=number_topics)
         lda.fit(count_data)
         
         # Create a topic count matrix for the topic distribution of each document
