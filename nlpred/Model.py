@@ -11,6 +11,8 @@ from sklearn.metrics import roc_auc_score
 import numpy as np
 import pickle
 from typing import List
+import multiprocessing
+import tqdm
 from TextPrep import prepareTestTrainData
 from TextPrep import preparePredData
 
@@ -48,7 +50,9 @@ class Model:
     
     ## Predicts True/False (1/0) for each document (String) in the List listOfDocStrings argument using the model stored in 
     #   this Model object.
+    #
     # @arg listOfDocStrings a List of Strings wherein each String contains the text of a document to predict True/False from
+    #
     # @return a DataFrame containing three columns:
     #           1)  'paper_text', the original input textual data
     #           2)  'paper_text_processed', the processed (tokenized with punctuation and capitalization removed) textual data
@@ -83,14 +87,18 @@ class Model:
         return tbr
     
     ## Saves the model as a .pkl file
+    #
     # @arg fileName the desired filename, including the .pkl extension.  e.g., "my_model.pkl"
+    #
     # @postState the model object will be saved as fileName in the current working directory.
     def save(self, fileName: str = "my_model.pkl"):
         with open(fileName, 'wb') as file:
             pickle.dump(self, file)
 
 ## Loads a model saved as a .pkl file
+#
 # @arg fileName the file name of the saved model, including the .pkl extension.  e.g., "my_model.pkl"
+#
 # @return a Model object of the model saved in the specified .pkl file.
 def loadModel(fileName: str) -> Model:
     with open(fileName, 'rb') as file:
@@ -99,8 +107,10 @@ def loadModel(fileName: str) -> Model:
 
 ## Predicts True/False (1/0) for each document (String) in the List listOfDocStrings argument using the model stored in 
 #   the indicated file location.
+#
 # @arg fileName the file name of the saved model, including the .pkl extension.  e.g., "my_model.pkl"
 # @arg listOfDocStrings a List of Strings wherein each String contains the text of a document to predict True/False from
+#
 # @return a DataFrame containing three columns:
 #           1)  'paper_text', the original input textual data
 #           2)  'paper_text_processed', the processed (tokenized with punctuation and capitalization removed) textual data
@@ -111,6 +121,9 @@ def predictFromFile(fileName: str, listOfDocStrings: List[str]):
     return tbr
 
 ## Creates a Model object for each topic quantity specified in the argument topicQuantityVector.
+# Python's implementation of multithreading, mutiprocessing, is used in this method to vastly decrease runtime.
+# Multiprocessing is used instead of Python's "multithreading" since this method is entirely CPU bound and involves no file/internet I/O.
+#
 # @arg topicQuantityVector a vector of the topic quantities to test, e.g. [30,40,50,60,70,80].
 #                           Note that the values in this vector must be integers.
 #                           Note that if only a single quantity is desired, it must be passed as
@@ -123,6 +136,79 @@ def predictFromFile(fileName: str, listOfDocStrings: List[str]):
 # @arg max_iterations the maximum number of iterations for the Stochastic Average Gradient Descent ('saga') solver 
 #                       to go through for the elastic net CV.  Default is 4900.  Lower numbers drastically decrease 
 #                       runtime for large datasets, but may create inferior models.
+#
+# @return a list of Model objects, one for each fitted model based on the topic quantities provided in the argument topicQuantityVector.
+def modelMultiProc(topicQuantityVector: List[int], count_data, count_vectorizer: CountVectorizer, responseValues: List[bool], max_iterations: int = 4900):
+    # Check for the number of simultaneous threads that can be supported by current hardware and OS
+    numProcesses = multiprocessing.cpu_count()
+    # Don't allocate extra threads if there are less quantities (models to create) than available threads
+    if(numProcesses > len(topicQuantityVector)):
+        numProcesses = len(topicQuantityVector)
+    # Break the list of topic quantities into numProcesses parts
+    topicQuantityChunks = np.array_split(topicQuantityVector, numProcesses)
+    # Note that topicQuantityChunks is a List of Lists of topic quantities to be used.
+    # topicQuantityChunks[i] is a list of the topic quantities to be used by thread i, for i an element of [0,numProcesses).
+    
+    tbrList = []
+    # Instantialize a Manager object
+    #manager = multiprocessing.Manager()
+    if __name__ == "__main__":
+        with multiprocessing.Manager() as manager:
+            # Instantialize a Lock object (conntainer for operating system's Semaphore object)
+            lock = manager.Lock()
+            # Create an array to hold the threads
+            threads = []
+            # Create a proxy list to be altered by the threads
+            managerList = manager.list([])
+            # Generate threads
+            for i in range(numProcesses):
+                thread = multiprocessing.Process(target=_modelMultiProcHelper, args=(topicQuantityChunks[i], count_data, count_vectorizer, responseValues, managerList, lock, max_iterations))
+                threads.append(thread)
+                if __name__ == "__main__":
+                    print(f"Thread {i} started...")
+                    thread.start()
+            # Allow all threads to complete
+            for thread in threads:
+                if __name__ == "__main__":
+                    thread.join()
+            tbrList = managerList.__deepcopy__({})
+        # Return a List of Model objects generated by the threads
+        #return managerList
+        return tbrList
+    else:
+        print("__name__ != '__main__'")
+
+## Helper method for modelMultiProc().
+# Calls modelWithNTopics(), then appends the returned list of generated models to the managerList argument.  Potential race conditions are accounted for with locks.
+#
+# @arg managerList the proxy list generated from multiprocessing.Manager.list() in the modelMultiProc() method
+# @arg lock the multiprocessing.Lock() object instantiated in the modelMultiProc() method.  This is a Semaphore object from the operating system.
+# @see modelWithNTopics method for further argument details.
+#
+# @poststate the proxy list "managerList" is appended with the models generated for the topic quantities listed in the argument topicQuantityVector.
+def _modelMultiProcHelper(topicQuantityVector: List[int], count_data, count_vectorizer: CountVectorizer, responseValues: List[bool], managerList: List[Model], lock: multiprocessing.Lock, max_iterations: int = 4900):
+    fitList = modelWithNTopics(topicQuantityVector, count_data, count_vectorizer, responseValues, max_iterations)
+    lock.acquire()
+    for fit in fitList:
+        managerList.append(fit)
+    lock.release()
+    
+
+## Creates a Model object for each topic quantity specified in the argument topicQuantityVector.
+#
+# @arg topicQuantityVector a vector of the topic quantities to test, e.g. [30,40,50,60,70,80].
+#                           Note that the values in this vector must be integers.
+#                           Note that if only a single quantity is desired, it must be passed as
+#                               a list with one element, e.g. topicQuantityVector = [10].
+# @arg count_data the input to LDA.fit(...)
+# @arg count_vectorizer the CoutVectorizer object used int he creation of the Term-Document Matrix
+# @arg responseValues the response, Y, for the input data; a vector;
+#                       this is 'values' from the DataFrame 'processedCorpusDataFrame' which is in the Dictionary returned
+#                       from the prepareTestTrainData() method in TextPrep.py
+# @arg max_iterations the maximum number of iterations for the Stochastic Average Gradient Descent ('saga') solver 
+#                       to go through for the elastic net CV.  Default is 4900.  Lower numbers drastically decrease 
+#                       runtime for large datasets, but may create inferior models.
+#
 # @return a list of Model objects, one for each fitted model based on the topic quantities provided in the argument topicQuantityVector.
 def modelWithNTopics(topicQuantityVector: List[int], count_data, count_vectorizer: CountVectorizer, responseValues: List[bool], max_iterations: int = 4900):
     
@@ -165,20 +251,6 @@ def modelWithNTopics(topicQuantityVector: List[int], count_data, count_vectorize
         # AUC: 
         y_pred_proba = fit.predict_proba(xtest)[::,1]
         auc = roc_auc_score(ytest, y_pred_proba)
-        
-        # Create the dictionary to add to the list
-        # tempDict = {
-        #     "topicQuantity" : number_topics,
-        #     "fit" : fit,
-        #     "topicLDAModel" : lda,
-        #     "count_vectorizer" : count_vectorizer,
-        #     "confusionMatrix" : cm,
-        #     "accuracy" : acc,
-        #     "recall" : rec,
-        #     "AUC" : auc
-        # }
-        # Add the dictionary to the list
-        #fitList.append(tempDict)
 
         # Create the Model object to add to the list
         tempModel = Model(number_topics, fit, lda, count_vectorizer, cm, acc, rec, auc)
@@ -198,7 +270,7 @@ def modelWithNTopics(topicQuantityVector: List[int], count_data, count_vectorize
 # modelList = modelWithNTopics([10], count_d, count_v, yVals)
 
 ##### File I/O #####
-# pkl_filename = "optimal_reddit_suicide_model.pkl"
+# pkl_filename = "test_model.pkl"
 # with open(pkl_filename, 'wb') as file:
 #     pickle.dump(modelList[0], file)
     
@@ -212,3 +284,10 @@ def modelWithNTopics(topicQuantityVector: List[int], count_data, count_vectorize
 # testDocStringList = testDocsToTest1 + testDocsToTest2
 # testModel = loadModel("optimal_reddit_suicide_model.pkl")
 # predDict = testModel.predict(testDocStringList)
+
+##### modelMultiProc() method #####
+preppedData = prepareTestTrainData('SuicideWatchRedditJSON.json', 'AllRedditJSON.json', isRedditData=True)
+count_d = preppedData['count_data']
+count_v = preppedData['count_vectorizer']
+yVals = preppedData['processedCorpusDataFrame']["value"].tolist()
+modelList = modelMultiProc([10,15,20,25], count_d, count_v, yVals)
