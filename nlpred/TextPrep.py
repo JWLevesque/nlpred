@@ -17,20 +17,18 @@ from sklearn.feature_extraction.text import CountVectorizer
 #                   1) True indicates the data is given as JSON objects, and _getCorpusFromReddit will be called.
 #                   2) False indicates the data is given as vectors of Strings, and _getCorpusFromVectors will be called.
 #                 Note that redditData is TRUE by default.
-# @return A Dictionary with three elements: 
+# @return A Dictionary with two elements: 
 #         1)  "processedCorpusDataFrame", a data frame containing three columns:
 #               I)   'paper_text', the original input textual data
 #               II)  'value', the corresponding 1/0 (i.e., true/false) value associated with the 'paper_text' entry in the same row
 #               III) 'paper_text_processed', the processed (tokenized with punctuation and capitalization removed) textual data
 #         2)  "count_data", the token counts from the processed textual data to be used in model creation
-#         3)  "count_vectorizer", the CountVectorizer object used in the creation of the Term-Document Matrix
 def prepareTestTrainData(trueSource, falseSource, isRedditData: bool = True):
     processedCorpusDataFrame = _getCorpusDataFrame(trueSource, falseSource, redditData=isRedditData)
-    count_data, count_vectorizer = _processDataFrame(processedCorpusDataFrame)
+    count_data = _processDataFrame(processedCorpusDataFrame)
     tempDict = {
         "processedCorpusDataFrame" : processedCorpusDataFrame,
         "count_data" : count_data,
-        "count_vectorizer" : count_vectorizer
     }
     return tempDict
 
@@ -44,7 +42,7 @@ def prepareTestTrainData(trueSource, falseSource, isRedditData: bool = True):
 #         2)  "count_data", the token counts from the processed textual data to be used for prediction
 def preparePredData(docsToPredict: List[str]):
     processedCorpusDataFrame = _getPredDataFrame(stringList=docsToPredict)
-    count_data, _ = _processDataFrame(processedCorpusDataFrame)
+    count_data = _processDataFrame(processedCorpusDataFrame)
     tempDict = {
         "processedCorpusDataFrame" : processedCorpusDataFrame,
         "count_data" : count_data
@@ -137,9 +135,8 @@ def _getPredDataFrame(stringList: List[str]):
 #      This is returned from either the _getCorpusDataFrame method or the _getPredDataFrame method.
 # @postState A new column named 'paper_text_processed' will be added to the argument DataFrame.  This new column will be
 #               a copy of the original 'paper text' column, except punctuation and capitalization will be removed.
-# @return a Tuple containing:
-#      1) the token counts from the input data derived via sklearn.feature_extraction.text.CountVectorizer
-#      2) the CountVectorizer object used
+# @return the token counts from the input data derived via sklearn.feature_extraction.text.CountVectorizer
+#           i.e., the Term-Document Matrix
 def _processDataFrame(papers):
     
     # Load the regular expression library
@@ -160,10 +157,4 @@ def _processDataFrame(papers):
     count_data = count_vectorizer.fit_transform(papers['paper_text_processed'])
     # count_data is the Term-Document Matrix
 
-    return count_data, count_vectorizer;
-
-
-############# Test stuff
-#testData = _getCorpusDataFrame('SuicideWatchRedditJSON.json', 'AllRedditJSON.json', redditData=True)
-
-#count_data = _processDataFrame(testData)
+    return count_data
