@@ -8,6 +8,7 @@ from sklearn.metrics import accuracy_score
 from sklearn.metrics import recall_score
 from sklearn.metrics import roc_auc_score
 import numpy as np
+import pandas as pd
 import pickle
 from typing import List
 import multiprocessing
@@ -81,7 +82,7 @@ class Model:
     ## Prints to stdout a summary of the model.
     def print(self):
         print("Topic Quantity : ", self.topicQuantity)
-        print("Confusion Matrix : \n", self.confusion_matrix)
+        print("Model Id : ", self.id)
         print("Accuracy : ", self.accuracy)
         print("Recall : ", self.recall)
         print("AUC : ", self.AUC)
@@ -90,7 +91,7 @@ class Model:
     def __str__(self):
         tbr = (
             f"Topic Quantity : {self.topicQuantity}\n"
-            f"Confusion Matrix : \n{self.confusion_matrix}\n"
+            f"Model Id : {self.id}\n"
             f"Accuracy : {self.accuracy}\n"
             f"Recall : {self.recall}\n"
             f"AUC : {self.AUC}"
@@ -98,11 +99,25 @@ class Model:
         return tbr
     
     ## Provides sorting logic for Model objects.
-    # Model objects will be sorted based on AUC
-    def __eq__(self, other):
-        return self.AUC == other.AUC
+    # Model objects will be sorted based on AUC.
     def __lt__(self, other):
         return self.AUC < other.AUC
+    def __le__(self, other):
+        return self.AUC <= other.AUC
+    def __gt__(self, other):
+        return self.AUC > other.AUC
+    def __ge__(self, other):
+        return self.AUC >= other.AUC
+    
+    ## Provides equality definition for Model objects.
+    # Model objects with the same Id are the "same" model.
+    def __eq__(self, other):
+        return isinstance(other, Model) and self.id.int == other.id.int
+    
+    ## Provides inequality definition for Model objects.
+    # Model objects with different Ids are not the "same" model.
+    def __ne__(self, other):
+        return not self == other
 
 
 ## Loads a model saved as a .pkl file
@@ -145,37 +160,44 @@ def predictFromFile(fileName: str, listOfDocStrings: List[str]):
 #   their defaults.
 #
 # @arg trueSource Either:
-#                   1) if redditData = true, the filename of the JSON file containing "true" Strings, including the .json extension
-#                   2) if redditData = false, an array of Strings which are known to be associated with a "true"/"1" prediction
+#                   1) if isRedditData = true, the filename of the JSON file containing "true" Strings, including the .json extension
+#                   2) if isRedditData = false, an array of Strings which are known to be associated with a "true"/"1" prediction
 # @arg falseSource Either:
-#                   1) if redditData = true, the filename of the JSON file containing "false" Strings, including the .json extension
-#                   2) if redditData = false, an array of Strings which are known to be associated with a "false"/"0" prediction
-# @arg redditData Boolean:  
-#                   1) True indicates the data is given as JSON objects, and _getCorpusFromReddit will be called.
+#                   1) if isRedditData = true, the filename of the JSON file containing "false" Strings, including the .json extension
+#                   2) if isRedditData = false, an array of Strings which are known to be associated with a "false"/"0" prediction
+# @arg isRedditData Boolean:  
+#                   1) True indicates the data is given as reddit JSON objects, and _getCorpusFromReddit will be called.
 #                   2) False indicates the data is given as vectors of Strings, and _getCorpusFromVectors will be called.
 #                 Note that redditData is TRUE by default.
 # @arg max_enet_iterations the maximum number of iterations for the Stochastic Average Gradient Descent ('saga') solver 
 #                           to go through for the elastic net CV.  Default is 4900.  Lower numbers drastically decrease 
 #                           runtime for large datasets, but may create inferior models.
-# @arg max_quantity_range_iterations the number of models to generate for each topic quantity 
-#                                       in range(startQuantity, stopQuantity+1, step = quantitystep).
-#                                       Must be an integer.  Default is 5.
-# @arg max_quantity_focus_iterations the number of models to generate for each topic quanity
-#                                       in the interval [focusQuantity-5, focusQuantity+5].
-#                                       Must be an integer.  Default is 20.                                  
-# @arg startQuantity the smallest quantity of topics to generate a model with.  Must be an integer.  Default is 10.
-# @arg stopQuantity the largest quantity of topics to generate a model with.  Must be an integer.  Default is 50.
-# @arg quantityStep the integer value to count by for the topic quantities to generate models with. Must be an integer.  Default is 5.
-#                   e.g., if quantityStep = 5, startQuantity = 10, and stopQuantity = 60, then models will be generated
-#                       for each of the following topic quantities: [10,15,20,25,30,35,40,45,50,55,60].
-# @arg focusQuantity the user's best guess for the optimal number of topics.  Must be an integer.  Default is 10.
-#                    Additional models will be generated for each topic quantity in the interval [focusQuantity-4, focusQuantity+4].
+# @arg range_iterations the number of models to generate for each topic quantity in range(start, stop+1, step = step).
+#                                Setting this to 0 will disable the model generation dictated by start, stop,
+#                                   and focus.  i.e., models will be only generated in the Focus range.
+#                                Must be a non-negative integer.  Default is 5.
+# @arg focus_iterations the number of models to generate for each topic quanity in the interval [focus-5, focus+5].
+#                                Setting this to 0 will disable extra model generation in the focus range.
+#                                Must be a non-negative integer.  Default is 20.                                  
+# @arg start the smallest quantity of topics to generate a model with.  Must be an integer.  Default is 10.
+# @arg stop the largest quantity of topics to generate a model with.  Must be an integer.  Default is 50.
+# @arg step the integer value to count by for the topic quantities to generate models with. Must be an integer.  Default is 5.
+#                   e.g., if step = 5, start = 10, and stop = 50, then models will be generated for each of
+#                       the following topic quantities: [10,15,20,25,30,35,40,45,50].
+# @arg focus the user's best guess for the optimal number of topics.  Must be an integer.  Default is 10.
+#                    Additional models will be generated for each topic quantity in the interval [focus-4, focus+4].
+# @arg appendFullModelList boolean; if True, the full list of models generated sorted by AUC in 
+#                              descending order will be appended to the return Dictionary.
+#                          Default is False.
+#
 # @return A Dictionary containing five candidates for an optimal model, stored as Model objects:
 #           1) "AUC", the model with the highest AUC
 #           2) "acc", the model with the highest accuracy
 #           3) "rec", the model with the highest recall
 #           4) "acc_1se", the model with the highest accuracy among models whose AUC is within 1 standard error of the maximum
 #           5) "rec_1se", the model with the highest recall among models whose AUC is within 1 standard error of the maximum
+#         If optional argument appendFullModelList = True (default is False):
+#           6) "modelList", a list containing Model objects for all models generated, sorted by AUC in descending order.
 # 
 # A reminder:
 # Accuracy: a.k.a. SPECIFICITY, the classification rate; i.e. the percent of correct predictions.
@@ -186,41 +208,77 @@ def predictFromFile(fileName: str, listOfDocStrings: List[str]):
 #   The recall is intuitively the ability of the classifier to find all the positive samples.
 def getModels(
         trueSource, falseSource, isRedditData: bool = True, max_enet_iterations: int = 4900, 
-        max_quantity_range_iterations: int = 5, max_quantity_focus_iterations: int = 10, 
-        startQuantity: int = 10, stopQuantity: int = 50, quantityStep: int = 5, focusQuantity: int = 10):
+        range_iterations: int = 5, focus_iterations: int = 10, start: int = 10, stop: int = 50, 
+        step: int = 5, focus: int = 10, appendFullModelList: bool = False):
     
     # Preprocess the corpus
     preppedData = prepareTestTrainData(trueSource, falseSource, isRedditData)
-    # Extract arguments for modelMultiProc() method from preppedData
+    # Extract arguments for _modelMultiProc() method from preppedData
     count_d = preppedData['count_data']
     yVals = preppedData['processedCorpusDataFrame']["value"].tolist()
 
     # Populate a list with the topic quantities to create models for
-    quantityList = np.arange(start= startQuantity, stop= stopQuantity + 1, step= quantityStep).tolist()
-    # Add the 10 quantities, counting by 1, around focusQuantity to the list
-    if(focusQuantity < 6):
-        start = 2
+    quantityList = np.arange(start= start, stop= stop + 1, step= step).tolist()
+    # Add the 9 quantities, counting by 1, around focusQuantity to the list
+    if(focus < 6):
+        focusStart = 2
     else:
-        start = focusQuantity - 4
-    # range() is exclusive on the stop parameter, so focusQuantity+5 gives an interval of +/- 4 from focusQuantity
-    stop = focusQuantity + 5
-    focusList = [*range(start, stop)]
+        focusStart = focus - 4
+    # range() is exclusive on the stop parameter, so focus+5 gives an interval of +/- 4 from focus
+    focusStop = focus + 5
+    focusList = [*range(focusStart, focusStop)]
     # Add duplicate quantities as per the specified number of quantity iterations
-    focusList = focusList * max_quantity_focus_iterations
-    quantityList = quantityList * max_quantity_range_iterations
+    focusList = focusList * focus_iterations
+    quantityList = quantityList * range_iterations
+    # Note that if either of the iterations arguments are 0, their corresponding List will be empty
+    # e.g., if quantity_focus_iterations = 0, then the Focus feature of this method is disabled
     quantityList = quantityList + focusList
 
     # Generate all specified models
-    modelList = modelMultiProc(quantityList, count_d, yVals, max_enet_iterations)
+    modelList = _modelMultiProc(quantityList, count_d, yVals, max_enet_iterations)
     
     # NOTE for future development of this method:
     # If ANYTHING is done with modelList--access, mutation, etc.--the code for it
     # MUST be put inside a 'if __name__ == "main"' bracket.
     # Non-descriptive and misleading exceptions will be thrown otherwise.
     if __name__ == "__main__":
-        tbrDict = getOptimalModelCandidates(modelList, yVals)
-        return tbrDict
-    return modelList
+        tbrDict = _getOptimalModelCandidates(modelList, yVals)
+        if appendFullModelList:
+            modelList.sort(key=lambda x: x.AUC, reverse=True)
+            tbrDict['modelList'] = modelList
+        return tbrDict    
+
+## Takes a list of Model objects and places them in a pandas.DataFrame, sorted by AUC, for easy comparison.
+#
+# @arg modelList a list of Models to create the DataFrame from
+#
+# @return a pandas.DataFrame object containing pertinent statistics for model comparison, 
+#           sorted by AUC of the models in descending order.
+#         Each row of the DataFrame represents a Model from the argument modelList.
+#         Note that the index of the data frame rows correspond to the index of the model in the argument modelList.
+def getCompDF(modelList: List[Model]):
+    # Create a pandas.DataFrame object to hold the AUC, recall, and accuracy of each model
+    AUCList = []
+    accList = []
+    recList = []
+    numTopicsList = []
+    for model in modelList:
+        AUCList.append(model.AUC)
+        accList.append(model.accuracy)
+        recList.append(model.recall)
+        numTopicsList.append(model.topicQuantity)
+    tempDict = {
+        "AUC" : AUCList,
+        "Accuracy" : accList,
+        "Recall" : recList,
+        "Topics" : numTopicsList
+    }
+    modelDF =  pd.DataFrame(data = tempDict)
+    # Sort the models within the data frame by AUC in descending order.
+    # Note that the "index" column will represent the index of each model in the 
+    #   original List provided as an argument to this function.
+    modelDF.sort_values(by = 'AUC', ascending = False, inplace = True)
+    return modelDF
     
 
 ## Creates a Model object for each topic quantity specified in the argument topicQuantityVector.
@@ -240,8 +298,9 @@ def getModels(
 #                       runtime for large datasets, but may create inferior models.
 #
 # @return a list of Model objects, one for each fitted model based on the topic quantities provided in the argument topicQuantityVector.
-def modelMultiProc(
-        topicQuantityVector: List[int], count_data, responseValues: List[bool], max_iterations: int = 4900):
+def _modelMultiProc(
+        topicQuantityVector: List[int], count_data, responseValues: List[bool], 
+        max_iterations: int = 4900) -> List[Model]:
     # Check for the number of simultaneous threads that can be supported by current hardware and OS
     numProcesses = multiprocessing.cpu_count()
     # Don't allocate extra threads if there are less quantities (models to create) than available threads
@@ -257,25 +316,33 @@ def modelMultiProc(
     if __name__ == "__main__":
         multiprocessing.freeze_support()
         # Create a Queue to indicate when the progress bar should be updated
+        # This queue will also hold the generated Model objects
         pbarQueue = multiprocessing.Queue()
-        # Create the manual tqdm progress bar, total = num_models_to_create
-        pbar = tqdm.tqdm(total= len(topicQuantityVector))
         # Print a header for the thread initialization printouts
         print("\nInitializing Threads: ")
         # Create an array to hold the threads
         threads = []
+        # Creare a manual tqdm progress bar for thread initialization
+        thread_pbar = tqdm.tqdm(total = numProcesses, position = 0, leave = True)
         # Generate threads
         for i in range(numProcesses):
-            thread = multiprocessing.Process(target=modelWithNTopics, args=(topicQuantityChunks[i], count_data, responseValues, max_iterations, pbarQueue, True))
+            thread = multiprocessing.Process(target=_modelWithNTopics, args=(topicQuantityChunks[i], count_data, responseValues, max_iterations, pbarQueue, True))
             threads.append(thread)
             if __name__ == "__main__":
-                print(f"Thread {i + 1} of {numProcesses} started...")
                 thread.start()
-        # Print a header for the progress bar
-        print("Generating models: ")
+                # Update the thread initialization progress bar
+                thread_pbar.update(1)
+        # Close the thread initialization progress bar
+        thread_pbar.close()
+        # Print a header for the model generation progress bar
+        print("Generating Models: ")
+        # Create a manual tqdm progress bar for model generation, total = num_models_to_create
+        pbar = tqdm.tqdm(total= len(topicQuantityVector))
         # Listen for "created a model" events
         finishedModels = 0
         tbrList = []
+        # Add Model objects to the return List as they are created.
+        # Update the model generation progress bar for each model added to the return list.
         while(finishedModels < numModelsToCreate):
             modelToAdd = pbarQueue.get()
             tbrList.append(modelToAdd)
@@ -286,6 +353,7 @@ def modelMultiProc(
             if __name__ == "__main__":
                 multiprocessing.freeze_support()
                 thread.join()
+        # Close the model generation progress bar
         pbar.close()
         # Return a List of Model objects generated by the threads
         return tbrList
@@ -311,9 +379,9 @@ def modelMultiProc(
 #           Note that the default value is False, and this should not be changed.
 #
 # @return a list of Model objects, one for each fitted model based on the topic quantities provided in the argument topicQuantityVector.
-def modelWithNTopics(
+def _modelWithNTopics(
         topicQuantityVector: List[int], count_data, responseValues: List[bool], max_iterations: int = 4900, 
-        pbarQueue: multiprocessing.Queue= None, isMultiProc: bool = False):
+        pbarQueue: multiprocessing.Queue= None, isMultiProc: bool = False) -> List[Model]:
     
     fitList = []
     for topicQuantity in topicQuantityVector:
@@ -386,13 +454,13 @@ def modelWithNTopics(
 #           3) "rec", the model with the highest recall
 #           4) "acc_1se", the model with the highest accuracy among models whose AUC is within 1 standard error of the maximum
 #           5) "rec_1se", the model with the highest recall among models whose AUC is within 1 standard error of the maximum
-def getOptimalModelCandidates(modelList: List[Model], yVals: List[bool]):
+def _getOptimalModelCandidates(modelList: List[Model], yVals: List[bool]):
     # Generate the dictionary of the five optimal model candidates
+    # Note that since this is called once when generating large lists of models,
+    #   minimizing memory footprint is prioritized over minimizing runtime
     # First, sort by accuracy
     modelList.sort(key=lambda x: x.accuracy, reverse=True)
-    #accList = sorted(modelList, key = lambda x: x.accuracy, reverse = True)
     acc = modelList[0]
-    #acc = accList[0]
     # Sort by recall
     modelList.sort(key=lambda x: x.recall, reverse=True)
     rec = modelList[0]
@@ -400,7 +468,7 @@ def getOptimalModelCandidates(modelList: List[Model], yVals: List[bool]):
     modelList.sort(key=lambda x: x.AUC, reverse=True)
     AUC = modelList[0]
     # Truncate the list to contain only models with AUC within 1 standard error of the maximum
-    seAUC = se_auc(AUC.AUC, yVals.count(1), yVals.count(0))
+    seAUC = _se_auc(AUC.AUC, yVals.count(1), yVals.count(0))
     auc_1se = AUC.AUC - seAUC
     modelList = list(filter(lambda x: x.AUC >= auc_1se, modelList))
     # Sort the truncated list by accuracy to find acc_1se
@@ -444,7 +512,7 @@ def getOptimalModelCandidates(modelList: List[Model], yVals: List[bool]):
 # se_auc(0.75, 110, 110)
 # ## standard error increases when sample size shrinks
 # se_auc(0.75, 20, 20)
-def se_auc(auc, n_p, n_n):
+def _se_auc(auc, n_p, n_n) -> float:
     D_p = (n_p - 1) * ((auc/(2 - auc)) - (auc**2))
     D_n = (n_n - 1) * ((2 * (auc**2))/(1 + auc) - (auc**2))
     SE_auc = ((auc * (1 - auc) + D_p + D_n)/(n_p * n_n))**0.5
@@ -483,5 +551,11 @@ def se_auc(auc, n_p, n_n):
 # modelList = modelMultiProc([10,15,20,25], count_d, count_v, yVals)
 
 ##### getModels() method #####
-#modelDict = getModels('SuicideWatchRedditJSON.json', 'AllRedditJSON.json', startQuantity = 10, stopQuantity = 10)
-modelDict = getModels('SuicideWatchRedditJSON.json', 'AllRedditJSON.json', startQuantity = 5, stopQuantity = 15, quantityStep = 1)
+#modelDict = getModels('SuicideWatchRedditJSON.json', 'AllRedditJSON.json', start = 10, stop = 10)
+#modelDict = getModels('SuicideWatchRedditJSON.json', 'AllRedditJSON.json', start = 5, stop = 15, step = 1)
+#modelDict = getModels('SuicideWatchRedditJSON.json', 'AllRedditJSON.json')
+#modelDict = getModels('SuicideWatchRedditJSON.json', 'AllRedditJSON.json', focus_iterations = 0, appendFullModelList = True, stop = 20)
+#modelDict = getModels('SuicideWatchRedditJSON.json', 'AllRedditJSON.json', appendFullModelList = True, focus_iterations = 0, start = 5, stop = 30, range_iterations = 40, step = 1)
+#modelDict = getModels('SuicideWatchRedditJSON.json', 'AllRedditJSON.json', appendFullModelList = True, focus_iterations = 0, start = 14, stop = 14, range_iterations = 500, step = 1)
+#if __name__ == "__main__":
+#    mod_df = getCompDF(modelDict["modelList"])

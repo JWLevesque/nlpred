@@ -3,17 +3,16 @@ import pandas as pd
 import warnings
 from typing import List
 warnings.simplefilter("ignore", DeprecationWarning)
-from sklearn.feature_extraction.text import CountVectorizer
 
 ## Prepares textual input for model creation.  Supports both reddit JSON input and vectors of Strings.
 #
 # @arg trueSource Either:
-#                   1) if redditData = true, the filename of the JSON file containing "true" Strings, including the .json extension
-#                   2) if redditData = false, an array of Strings which are known to be associated with a "true"/"1" prediction
+#                   1) if isRedditData = true, the filename of the JSON file containing "true" Strings, including the .json extension
+#                   2) if isRedditData = false, an array of Strings which are known to be associated with a "true"/"1" prediction
 # @arg falseSource Either:
-#                   1) if redditData = true, the filename of the JSON file containing "false" Strings, including the .json extension
-#                   2) if redditData = false, an array of Strings which are known to be associated with a "false"/"0" prediction
-# @arg redditData Boolean:  
+#                   1) if isRedditData = true, the filename of the JSON file containing "false" Strings, including the .json extension
+#                   2) if isRedditData = false, an array of Strings which are known to be associated with a "false"/"0" prediction
+# @arg isRedditData Boolean:  
 #                   1) True indicates the data is given as JSON objects, and _getCorpusFromReddit will be called.
 #                   2) False indicates the data is given as vectors of Strings, and _getCorpusFromVectors will be called.
 #                 Note that redditData is TRUE by default.
@@ -128,7 +127,7 @@ def _getPredDataFrame(stringList: List[str]):
     return pd.DataFrame(data = stringList, columns=['paper_text'])
 
 
-## Tokenizes the data for LDA by removing punctuation and capitalization, and then provides token counts.
+## Tokenizes the data for LDA by removing punctuation, capitalization and English stop words, then provides token counts.
 # @arg papers a DataFrame containing two columns:
 #      1) 'paper_text', the textual data
 #      2) 'value', OPTIONAL, the corresponding 1/0 (i.e., true/false) value associated with the 'paper_text' entry in the same row
@@ -147,7 +146,8 @@ def _processDataFrame(papers):
 
     # Convert the titles to lowercase
     papers['paper_text_processed'] = papers['paper_text_processed'].map(lambda x: x.lower())
-
+    
+    # Load sklearn's Count Vectorizer
     from sklearn.feature_extraction.text import CountVectorizer
 
     # Initialise the count vectorizer with the English stop words
