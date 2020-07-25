@@ -81,3 +81,6 @@ The instance variables accessible to the user are as follows:
 |fit| The fitted logistic regression model itself, of type sklearn.linear_model.LogisticRegressionCV|
 |topicLDAModel| The LDA object for the fitted topic model.|
 |id| A unique identifier for the model.  Note that this is a UUID object.  The actual id may be found in “id.hex”.  The UUID wrapper object is kept for aesthetic reasons with regard to printing, etc.|
+
+# Full Documentation
+For full documentation, please see [documentation.pdf](documentation.pdf) in the repository.
